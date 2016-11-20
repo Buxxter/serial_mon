@@ -21,6 +21,7 @@ def handle_data(data):
         logger.debug(btn_params)
         mqttc.publish(topic='/devices/room/buttons/{}'.format(btn_params[0].replace('btn_', '')),
                       payload='{},{}'.format(btn_params[1], btn_params[2]))
+        mqttc.publish(topic=topic_tx, payload='light bin')
     else:
         mqttc.publish(topic='/serial{}/log'.format(serial_port.port), payload=data)
 
@@ -73,7 +74,8 @@ serial_port = serial.Serial(port=port, baudrate=baud, timeout=20)
 serial_port.flushInput()
 serial_port.flushOutput()
 serial_port.write(b'echo off\n')
-bt_override_state = 'on'
+bt_override_state = 'off'
+
 
 trash = ['ok', 'err']
 topic_device = '/serial{}'.format(serial_port.port)
