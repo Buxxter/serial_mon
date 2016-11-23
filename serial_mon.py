@@ -4,8 +4,14 @@
 import threading
 import serial
 import time
-from utils.logger import logger
 import paho.mqtt.client as mqtt
+
+import logging.config
+
+logging.config.fileConfig('log.conf')
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.propagate = False
 
 
 def handle_data(data):
@@ -21,7 +27,7 @@ def handle_data(data):
         logger.debug(btn_params)
         mqttc.publish(topic='/devices/room/buttons/{}'.format(btn_params[0].replace('btn_', '')),
                       payload='{},{}'.format(btn_params[1], btn_params[2]))
-        mqttc.publish(topic=topic_tx, payload='light bin')
+        mqttc.publish(topic=TOPIC_TX, payload='light bin')
     else:
         mqttc.publish(topic='/serial{}/log'.format(serial_port.port), payload=data)
 
@@ -47,7 +53,7 @@ def read_from_port(ser):
 
 def bt_override(state):
     # serial_port.write(bytearray('bt_override on\r\n', 'ascii'))
-    mqttc.publish(topic=topic_tx, payload='bt_override {}'.format(state))
+    mqttc.publish(topic=TOPIC_TX, payload='bt_override {}'.format(state))
 
 
 def on_connect(client, userdata, rc):
@@ -57,9 +63,9 @@ def on_connect(client, userdata, rc):
 
 def on_message(client, userdata, msg):
     logger.debug('{}: {}'.format(msg.topic, msg.payload))
-    if topic_tx in msg.topic:
+    if TOPIC_TX in msg.topic:
         serial_port.write(msg.payload + b'\r\n')
-    elif topic_bt in msg.topic:
+    elif TOPIC_BTN_OVERRIDE in msg.topic:
         global bt_override_state
         bt_override_state = 'on' if (b'1' in msg.payload) else 'off'
         bt_override(bt_override_state)
@@ -79,8 +85,8 @@ bt_override_state = 'off'
 
 trash = ['ok', 'err']
 topic_device = '/serial{}'.format(serial_port.port)
-topic_tx = topic_device + '/tx_buffer'
-topic_bt = topic_device + '/bt_override'
+TOPIC_TX = topic_device + '/tx_buffer'
+TOPIC_BTN_OVERRIDE = topic_device + '/bt_override'
 
 
 mqttc = mqtt.Client(client_id="pythonpub")
@@ -94,11 +100,16 @@ mqttc.loop_start()
 
 
 thread = threading.Thread(target=read_from_port, name='read_from_port', args=(serial_port,))
+thread.daemon = True
 thread.start()
 
-while True:
-    mqttc.publish(topic=topic_bt, payload=(1 if 'on' == bt_override_state else 0))
-    time.sleep(7)
-
+try:
+    while True:
+        mqttc.publish(topic=TOPIC_BTN_OVERRIDE, payload=(1 if 'on' == bt_override_state else 0))
+        time.sleep(7)
+except KeyboardInterrupt:
+    mqttc.loop_stop()
+    thread.join(timeout=0.1)
+    # raise
 
 
